@@ -49,7 +49,7 @@ class Robot:
     options.add_argument(f"user-agent={USER_AGENT}")
     options.add_argument("--no-sandbox") # need when run in docker
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--headless")  # If running in a headless environment
+    # options.add_argument("--headless")  # If running in a headless environment
     options.add_argument("--disable-gpu")  # If hardware acceleration is causing issues
     # options.add_argument("--verbose")
 
@@ -126,9 +126,9 @@ class Robot:
 
     self.__openHostsPage()
     hosts = self.fetchHosts()
-    for host in hosts:
+    for index, host in enumerate(hosts):
       hostLink = self.fetchHostLink(host) # This is for if we wanted to modify our Host IP.
-      hostBtn = self.fetchHostButton(host) # This is the button to confirm our free host
+      hostBtn = self.fetchHostButton(host, index+1) # This is the button to confirm our free host
       expDays = self.fetchHostExpirationDays(host)
       hostName = hostLink.text
       next_renewal.append(expDays)
@@ -187,8 +187,8 @@ class Robot:
     return host.find_element(By.XPATH, r".//a[@class='link-info cursor-pointer']")
 
   @staticmethod
-  def fetchHostButton(host: 'WebElement'):
-    button = host.find_elements(By.XPATH, r"""//*[@id="host-panel"]/table/tbody/tr/td[6]/button[1]""")
+  def fetchHostButton(host: 'WebElement', index: 'int'):
+    button = host.find_elements(By.XPATH, f"""//*[@id="host-panel"]/table/tbody/tr[{index}]/td[6]/button[1]""")
     if not len(button): return logging.info("Host \"confirm\" button not found")
 
     if button[0].text != "Confirm": return None
