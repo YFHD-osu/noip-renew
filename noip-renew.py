@@ -49,7 +49,7 @@ class Robot:
     options.add_argument(f"user-agent={USER_AGENT}")
     options.add_argument("--no-sandbox") # need when run in docker
     options.add_argument("--disable-dev-shm-usage")
-    # options.add_argument("--headless")  # If running in a headless environment
+    options.add_argument("--headless")  # If running in a headless environment
     options.add_argument("--disable-gpu")  # If hardware acceleration is causing issues
     # options.add_argument("--verbose")
 
