@@ -29,4 +29,4 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Execute Script # run main.py
-        run: python noip-renew.py -e
+        run: python noip-renew.py --environment-variable --headless

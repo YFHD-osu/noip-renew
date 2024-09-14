@@ -17,7 +17,6 @@ import logging
 import re, os, sys, time
 from argparse import ArgumentParser
 
-import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
@@ -25,8 +24,6 @@ from selenium.webdriver.remote.webelement import WebElement
 
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service as ChromeService
 
 from mail import buildService, fetchCode
@@ -37,27 +34,30 @@ USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:64.0) Gecko/20100
 
 class Robot:
 
-  def __init__(self, username: str, password: str, token: str):
+  def __init__(self, username: str, password: str, token: str, headless: bool, verbose: bool):
     self.token = token
     self.username = username
     self.password = password
 
     options = webdriver.ChromeOptions()
+    options.page_load_strategy = 'eager'
+
     #added for Raspbian Buster 4.0+ versions. Check https://www.raspberrypi.org/forums/viewtopic.php?t=258019 for reference.
     # options.add_argument("disable-features=VizDisplayCompositor")
     options.add_argument("window-size=1200x800")
     options.add_argument(f"user-agent={USER_AGENT}")
     options.add_argument("--no-sandbox") # need when run in docker
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--headless")  # If running in a headless environment
     options.add_argument("--disable-gpu")  # If hardware acceleration is causing issues
-    # options.add_argument("--verbose")
+
+    if headless:
+      options.add_argument("--headless")  # If running in a headless environment
+    
+    if verbose:
+      options.add_argument("--verbose")
 
     if 'https_proxy' in os.environ:
       options.add_argument(f"proxy-server={os.environ['https_proxy']}")
-
-    # latest_version = requests.get("https://chromedriver.storage.googleapis.com/LATEST_RELEASE")
-    # path = ChromeDriverManager(driver_version=latest_version.text).install()
 
     self.browser = webdriver.Chrome(options=options, service=ChromeService(log_output="chromedriver.log"))
     self.browser.set_page_load_timeout(90) # Extended timeout for Raspberry Pi.
@@ -184,7 +184,7 @@ class Robot:
 
   @staticmethod
   def fetchHostLink(host: 'WebElement'):
-    return host.find_element(By.XPATH, r".//a[@class='link-info cursor-pointer']")
+    return host.find_element(By.XPATH, r".//a[@class='link-info cursor-pointer notranslate']")
 
   @staticmethod
   def fetchHostButton(host: 'WebElement', index: 'int'):
@@ -213,6 +213,7 @@ def main():
   parser.add_argument("-t", "--token-path", help="Path to your Gmail API token json file", default="token.json")
   parser.add_argument("-e", "--environment-variable", help="If this flag be added, username; password; token arguments will not required", action='store_true')
   parser.add_argument("-v", "--verbose", help="Increase output verbosity", action="store_true")
+  parser.add_argument("-hl", "--headless", help="Hide browser window", action="store_true")
 
   args = parser.parse_args()
 
@@ -236,6 +237,6 @@ def main():
   if not (username and password):
     parser.error("Environment variables for username and password not found")
 
-  return Robot(username, password, token).renew()
+  return Robot(username, password, token, args.headless, args.verbose).renew()
 
 if __name__ == "__main__": sys.exit(main())
