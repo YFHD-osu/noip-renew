@@ -108,7 +108,11 @@ class Robot:
         element.send_keys(str(code)[index])
 
       logging.info(f"Current login URL = {self.browser.current_url}")
-      self.browser.find_element(By.NAME, "submit").click()
+
+      loginBtn = WebDriverWait(self.browser, 20).until(
+        EC.element_to_be_clickable((By.NAME, "submit")))
+      
+      loginBtn.click()
     
     logging.debug(f"Current wait URL = {self.browser.current_url}")
     self.browser.refresh() # Refresh page to make sure page be redirect
