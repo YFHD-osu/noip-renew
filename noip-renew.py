@@ -33,7 +33,6 @@ HOST_URL = "https://my.noip.com/dynamic-dns"
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:64.0) Gecko/20100101 Firefox/64.0"
 
 class Robot:
-
   def __init__(self, username: str, password: str, token: str, headless: bool, verbose: bool):
     self.token = token
     self.username = username
@@ -76,7 +75,9 @@ class Robot:
 
     if "noip.com/2fa/verify" in self.browser.current_url:
       attempts = 0
-      now = int(time.time())
+
+      # Past 10 minutes email is acceptable
+      now = int(time.time() - 600) 
       service = buildService(self.token)
       
       if not service:
@@ -96,9 +97,9 @@ class Robot:
         if code: break # Exit check loop if code is vaild
         time.sleep(5) # Prevent too many requests 
         
-        # Click "resend email" button if it's enabled
-        resendBtn = self.browser.find_element(By.ID, "resend")
-        if (resendBtn.is_enabled()) : resendBtn.click()
+        # # Click "resend email" button if it's enabled
+        # resendBtn = self.browser.find_element(By.ID, "resend")
+        # if (resendBtn.is_enabled()) : resendBtn.click()
 
       logging.info(f"Successfully got the verification code !")
       input2fa = self.browser.find_element(By.ID, "otp-input").find_elements(By.TAG_NAME, "input")
