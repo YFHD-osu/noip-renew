@@ -58,8 +58,10 @@ class Robot:
     if 'https_proxy' in os.environ:
       options.add_argument(f"proxy-server={os.environ['https_proxy']}")
 
+
     self.browser = webdriver.Chrome(options=options, service=ChromeService(log_output="chromedriver.log"))
     self.browser.set_page_load_timeout(90) # Extended timeout for Raspberry Pi.
+    # self.browser.delete_all_cookies()
 
   def login(self):
     logging.info(f"Opening {LOGIN_URL}...")
@@ -155,6 +157,7 @@ class Robot:
     try: 
       WebDriverWait(self.browser, 30).until(EC.presence_of_element_located((By.CLASS_NAME,'table-striped-row')))
     except TimeoutException:
+      print(self.browser.get_screenshot_as_base64())
       logging.error("Timeout to wait for element \"table-striped-row\", host page may not load properly")
       return
     logging.info("Host page loaded successfully")
