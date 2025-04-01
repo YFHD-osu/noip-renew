@@ -111,8 +111,10 @@ class Robot:
 
       loginBtn = WebDriverWait(self.browser, 20).until(
         EC.element_to_be_clickable((By.NAME, "submit")))
-      
-      loginBtn.click()
+  
+      self.browser.execute_script("arguments[0].click();", loginBtn)
+
+      # loginBtn.click()
     
     logging.debug(f"Current wait URL = {self.browser.current_url}")
     self.browser.refresh() # Refresh page to make sure page be redirect
