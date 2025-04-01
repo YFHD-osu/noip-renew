@@ -157,8 +157,7 @@ class Robot:
     try: 
       WebDriverWait(self.browser, 30).until(EC.presence_of_element_located((By.CLASS_NAME,'table-striped-row')))
     except TimeoutException:
-      print(self.browser.get_screenshot_as_base64())
-      logging.error("Timeout to wait for element \"table-striped-row\", host page may not load properly")
+      logging.error(f"Timeout to wait for element \"table-striped-row\", host page may not load properly\nScreenshot: {self.browser.get_screenshot_as_base64()}")
       return
     logging.info("Host page loaded successfully")
 
