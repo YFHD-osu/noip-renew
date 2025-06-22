@@ -94,9 +94,6 @@ class Robot:
     if headless:
       options.add_argument("--headless")  # If running in a headless environment
     
-    # if verbose:
-    #   options.add_argument("--verbose")
-
     if 'https_proxy' in os.environ:
       options.add_argument(f"proxy-server={os.environ['https_proxy']}")
 
@@ -312,6 +309,8 @@ def main():
     username = _fetchEnvOrRaise("username")
     password = _fetchEnvOrRaise("password")
     token = json.loads( _fetchEnvOrRaise("token") )
+    while isinstance(token, str):
+      token = json.loads( token )
 
   else:
     if not args.username:
@@ -329,6 +328,7 @@ def main():
       token = json.load(f)
 
   robot = Robot(username, password, token, args.headless)
+
   return robot.renew()
 
 if __name__ == "__main__": 
