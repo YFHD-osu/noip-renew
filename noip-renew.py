@@ -86,7 +86,6 @@ class Robot:
 
     #added for Raspbian Buster 4.0+ versions. Check https://www.raspberrypi.org/forums/viewtopic.php?t=258019 for reference.
     # options.add_argument("disable-features=VizDisplayCompositor")
-    options.add_argument("window-size=1200x800")
     options.add_argument(f"user-agent={USER_AGENT}")
     options.add_argument("--no-sandbox") # need when run in docker
     options.add_argument("--disable-dev-shm-usage")
@@ -103,6 +102,8 @@ class Robot:
 
     self.browser = webdriver.Chrome(options=options, service=ChromeService(log_output="chromedriver.log"))
     self.browser.set_page_load_timeout(90) # Extended timeout for Raspberry Pi.
+    self.browser.set_window_size(1280, 800)
+
     self.browser.delete_all_cookies()
 
   def checkLogin(self):
@@ -141,11 +142,8 @@ class Robot:
     logging.info(f"Navigating to {LOGIN_URL}")
     self.browser.get(LOGIN_URL)
     
-    ele_usr = self.browser.find_element(By.NAME ,"username")
-    ele_pwd = self.browser.find_element(By.NAME, "password")
-    ele_usr.send_keys(self.username)
-    ele_pwd.send_keys(self.password)
-
+    self.browser.execute_script(f'document.getElementById("username").value = "{self.username}";')
+    self.browser.execute_script(f'document.getElementById("password").value = "{self.password}";')
     self.browser.execute_script('document.getElementById("clogs").submit();')
     logging.info("Username and password entered and login button clicked")
 
@@ -208,7 +206,7 @@ class Robot:
 
   def updateHosts(self):
 
-    self._navigateAndWaitFor(HOST_URL, (By.XPATH, '//*[@id="host-panel"]/table/tbody/tr'))
+    self._navigateAndWaitFor(HOST_URL, (By.XPATH, '/html/body/div[1]/div[1]/div[2]/div/div[1]/div[1]/div[2]/div/div/div[2]/div[1]/table/tbody/tr[1]/td[1]'))
 
     hosts = Host.fromWebElement(
       self.browser.find_elements(By.XPATH, r'//*[@id="host-panel"]/table/tbody/tr')
@@ -233,6 +231,8 @@ class Robot:
       logging.error(f"Timeout for waiting element '{locator[1]}', page may not load properly\nScreenshot: {self.browser.get_screenshot_as_base64()}")
       return
     logging.info(f"Page '{url}' loaded successfully")
+
+    self.browser.save_screenshot("NEW2.png")
 
     # print("I wanna close")
     # time.sleep(1000)
@@ -295,7 +295,7 @@ def main():
   if sys.gettrace() is not None:
     logging.info("Debug environment detected. Using environment variable to execute the script.")
     args.verbose = True
-    args.headless = False
+    args.headless = True
     args.environment_variable = True
   
   username: str
