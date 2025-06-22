@@ -149,8 +149,7 @@ class Robot:
     self._waitWhileLoadComplete()
 
     if self.checkLogin():
-      logging.info("Login successfuly")
-      return
+      return True
     
     if not self.browser.find_elements(By.ID, "ManualSubmitMfa"):
       logging.info("Login failed, wrong username or password suspected")
@@ -166,15 +165,13 @@ class Robot:
     
     logging.info(f"Successfully got and entered the verification code !")
     
-    self.browser.refresh() # Refresh page to make sure page be redirect
-    try: # Wait for dashboard to load
-      logging.debug(f"Current wait URL = {self.browser.current_url}")
-      WebDriverWait(self.browser, 30).until(EC.presence_of_element_located((By.ID, "app")))
-    except TimeoutException:
-      return logging.error("Cannot load dashboard page, login may not success")
+    # Refresh page to make sure page be redirect
+    self.browser.refresh()
 
-    logging.info("Login successfuly")
-    return True
+    if self.checkLogin():
+      return True
+
+    return False
 
   def updateHosts(self):
 
@@ -240,7 +237,11 @@ class Robot:
     return host_tds
 
   def renew(self):
-    self.login()
+    if not self.login():
+      logging.info("Failed to login, script terminated.")
+      return
+    
+    logging.info("Login successfuly")
     self.updateHosts()
     self.browser.quit()
 
