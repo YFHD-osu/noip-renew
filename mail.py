@@ -1,95 +1,12 @@
 from argparse import ArgumentParser
-from datetime import datetime
-import json, logging, sys, re, os.path
+import json, logging, sys
 
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build, Resource
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-# If modifying these scopes, delete the file token.json.
-
-
-class Services:
-  SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.modify"
-  ]
-  
-  def __init__(self, authData: dict):
-    creds = Credentials.from_authorized_user_info(authData, Services.SCOPES)
-
-    # Refresh credential if needed
-    if creds and creds.expired and creds.refresh_token:
-      creds.refresh(Request())
-
-    self.creds = creds
-
-    self.service = build("gmail", "v1", credentials=self.creds)
-    return
-
-  def fetchCode(self, after: datetime) -> int:
-    results = self.service \
-      .users() \
-      .messages() \
-      .list(userId='me', q=f'after:{int(after.timestamp())}') \
-      .execute()
-    
-    messages = results.get('messages', [])
-
-    logging.info(f"Filtered {len(messages)} emails that income after {after}")
-
-    for msgId in map(lambda x: x["id"], messages):
-      message = self.service \
-        .users() \
-        .messages() \
-        .get(userId='me', id=msgId, format='full') \
-        .execute()
-      
-      snippet = message.get("snippet", "")
-
-      # Skip mail if snippet field not found
-      if not snippet: continue 
-
-      # Skip mail if it doesn't match No-IP verification mail pattern
-      if not re.match(r"No-IP Verification Code For account security purposes, please enter the following verification on our website: \d{6}", snippet): continue
-
-      # Move used verification mail to trash 
-      self.service.users().messages().trash(userId='me', id=msgId).execute()
-      
-      return re.findall(r"\d{6}", snippet)[0] # Return matched code
-
-  @staticmethod
-  def authoirzeFlow(credential: dict) -> dict:
-    flow = InstalledAppFlow.from_client_config(credential, Services.SCOPES)
-    creds = flow.run_local_server()
-
-    return creds.to_json()
-
-
-# def buildService(token: str) -> Resource:
-#   """Shows basic usage of the Gmail API. Lists the user's Gmail labels."""
-
-#   creds = None
-#   # The file token.json stores the user's access and refresh tokens, and is
-#   # created automatically when the authorization flow completes for the first
-#   # time.
-
-#   if not token: 
-#     if not os.environ.get("token"):
-#       return logging.error("Environment variable: \"token\" not found")
-    
-#     logging.info("Environment variable: \"token\" found, using it to login...")
-#     data = json.loads(os.environ["token"])
-#     creds = Credentials.from_authorized_user_info(data, SCOPES)
-  
-#   elif os.path.exists(token):
-#     logging.info(f"File: \"{token}\" found, using it to login...")
-#     creds = Credentials.from_authorized_user_file(token, SCOPES)
-
-  
-#   # Call the Gmail API
-  
+SCOPES = [
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.modify"
+]
 
 def main():
   logging.basicConfig(
@@ -110,7 +27,10 @@ def main():
   with open(args.credential, "r") as file:
     cred = json.load(file)
 
-  token = Services.authoirzeFlow(cred)
+  flow = InstalledAppFlow.from_client_config(cred, SCOPES)
+  creds = flow.run_local_server()
+
+  token = creds.to_json()
 
   with open("token.json", "w") as file:
     json.dump(token, file)

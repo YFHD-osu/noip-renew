@@ -13,26 +13,77 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from datetime import datetime, timedelta
 import json
 import logging
 import re, os, sys, time
 from argparse import ArgumentParser
+from datetime import datetime, timedelta
 
 from selenium import webdriver
-from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-
+from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service as ChromeService
 
-from mail import Services
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
 
 LOGIN_URL = "https://www.noip.com/login"
 HOST_URL = "https://my.noip.com/dynamic-dns"
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:64.0) Gecko/20100101 Firefox/64.0"
+
+class MailClawer:
+  SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify"
+  ]
+  
+  def __init__(self, authData: dict):
+    creds = Credentials.from_authorized_user_info(authData, MailClawer.SCOPES)
+
+    # Refresh credential if needed
+    if creds and creds.expired and creds.refresh_token:
+      creds.refresh(Request())
+
+    self.creds = creds
+
+    self.service = build("gmail", "v1", credentials=self.creds)
+    return
+
+  def fetchCode(self, after: datetime) -> int:
+    results = self.service \
+      .users() \
+      .messages() \
+      .list(userId='me', q=f'after:{int(after.timestamp())}') \
+      .execute()
+    
+    messages = results.get('messages', [])
+
+    logging.info(f"Filtered {len(messages)} emails that income after {after}")
+
+    for msgId in map(lambda x: x["id"], messages):
+      message = self.service \
+        .users() \
+        .messages() \
+        .get(userId='me', id=msgId, format='full') \
+        .execute()
+      
+      snippet = message.get("snippet", "")
+
+      # Skip mail if snippet field not found
+      if not snippet: continue 
+
+      # Skip mail if it doesn't match No-IP verification mail pattern
+      if not re.match(r"No-IP Verification Code For account security purposes, please enter the following verification on our website: \d{6}", snippet): continue
+
+      # Move used verification mail to trash 
+      self.service.users().messages().trash(userId='me', id=msgId).execute()
+      
+      return re.findall(r"\d{6}", snippet)[0] # Return matched code
 
 class Host:
   def __init__(self, name: str, expDays: int, confirmButton: 'WebElement'):
@@ -64,7 +115,7 @@ class Host:
     return Host(
       name = _fetchName(tr),
       expDays = _fetchExpDays(tr),
-      confirmButton= _fetchButton(tr, )
+      confirmButton= _fetchButton(tr)
     )
   
   @staticmethod
@@ -73,175 +124,129 @@ class Host:
       Host.fromTrWebElement(e) for e in tr
     ]
 
-class Robot:
-  def __init__(self, username: str, password: str, token: dict, headless: bool):
-    self.token = token
-    self.username = username
-    self.password = password
-
-    options = webdriver.ChromeOptions()
-    # options.page_load_strategy = 'eager'
-
-    #added for Raspbian Buster 4.0+ versions. Check https://www.raspberrypi.org/forums/viewtopic.php?t=258019 for reference.
-    # options.add_argument("disable-features=VizDisplayCompositor")
-    options.add_argument(f"user-agent={USER_AGENT}")
-    options.add_argument("--no-sandbox") # need when run in docker
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")  # If hardware acceleration is causing issues
-
-    if headless:
-      options.add_argument("--headless")  # If running in a headless environment
-    
-    if 'https_proxy' in os.environ:
-      options.add_argument(f"proxy-server={os.environ['https_proxy']}")
-
-    self.browser = webdriver.Chrome(options=options, service=ChromeService(log_output="chromedriver.log"))
-    self.browser.set_page_load_timeout(90) # Extended timeout for Raspberry Pi.
-    self.browser.set_window_size(1280, 800)
-
-    self.browser.delete_all_cookies()
-
-  def checkLogin(self):
-    element = self.browser.find_elements(By.ID, "main-menu-toggle")
-    
-    return len(element) != 0
+class LoginHandler:
+  def __init__(self, driver: 'WebDriver', max2FAAttempts: int = 30):
+    self.driver = driver
+    self.max2FAAttempts = max2FAAttempts
+    return
   
-  def fetchCode(self, maxTries: int):
+  def __waitWhileLoadComplete(self) -> None:
+    WebDriverWait(self.driver, 20).until(
+      lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+
+  def __checkLogin(self):
+    return len(self.driver.find_elements(By.ID, "main-menu-toggle")) != 0
+  
+  def __solve2FA(self, token: dict):
+    logging.info("2FA challenge entered, fetching the 2FA code...")
+
     # Past 10 minutes email is acceptable
     vaild_time = datetime.now() - timedelta(minutes=10)
 
-    service = Services(self.token)
+    service = MailClawer(token)
     
     if not service:
-      logging.error(f"Gmail API service not being built, script will end here.")
-      return
+      logging.error(f"Gmail API service not built, script will end here.")
+      return False
     
     logging.info(f"Gmail API service built, start fetching emails...")
 
-    while (maxTries > 0):
-      logging.info(f"Attempting to get verification code from Gmail API ({maxTries})")
+    attempt: int = 0
+
+    while (attempt < self.max2FAAttempts):
+      logging.info(f"Attempting to get verification code from Gmail API ({attempt})")
       code = service.fetchCode(vaild_time)
 
+      if code: break
+
       time.sleep(5)
+      attempt += 1
 
-      if code: return code
-      maxTries -= 1
+    if not code:
+      logging.error(f"Failed to get verification code (max attempt exceed)")
+      return False
 
-    logging.warning(f"Failed to get verification code (timeout)")
-    return None
-  
-  def _waitWhileLoadComplete(self) -> None:
-    WebDriverWait(self.browser, 20).until(
-      lambda d: d.execute_script("return document.readyState") == "complete"
-    )
-  
-  def login(self):
-    logging.info(f"Navigating to {LOGIN_URL}")
-    self.browser.get(LOGIN_URL)
-    
-    self.browser.execute_script(f'document.getElementById("username").value = "{self.username}";')
-    self.browser.execute_script(f'document.getElementById("password").value = "{self.password}";')
-    self.browser.execute_script('document.getElementById("clogs").submit();')
-    logging.info("Username and password entered and login button clicked")
-
-    self._waitWhileLoadComplete()
-
-    if self.checkLogin():
-      return True
-    
-    if not self.browser.find_elements(By.ID, "ManualSubmitMfa"):
-      logging.info("Login failed, wrong username or password suspected")
-      return 
-    
-    logging.info("2FA challenge entered, fetching the 2FA code...")
-    code = self.fetchCode(maxTries=30)
-
-    input2fa = self.browser.find_element(By.ID, "otp-input").find_elements(By.TAG_NAME, "input")
+    input2fa = self.driver \
+      .find_element(By.ID, "otp-input") \
+      .find_elements(By.TAG_NAME, "input")
     
     for index, element in enumerate(input2fa):
       element.send_keys(str(code)[index])
     
     logging.info(f"Successfully got and entered the verification code !")
+
+    return True
+
+  def loginWithPassword(self, username: str, password: str, token: dict):
+    logging.info(f"Navigating to {LOGIN_URL}")
+    self.driver.get(LOGIN_URL)
     
+    # Fill username and password in field, and submit the form using JS
+    self.driver.execute_script(f'document.getElementById("username").value = "{username}";')
+    self.driver.execute_script(f'document.getElementById("password").value = "{password}";')
+    self.driver.execute_script(f'document.getElementById("clogs").submit();')
+    logging.info("Username and password entered and login button clicked")
+
+    self.__waitWhileLoadComplete()
+
+    # If login not success after submitting the username and password, check if email 2FA is required
+    if self.driver.find_elements(By.ID, "ManualSubmitMfa") and not self.__solve2FA(token):
+      logging.error("Failed to pass through the 2FA challenge")
+      return False
+
     # Refresh page to make sure page be redirect
-    self.browser.refresh()
+    self.driver.refresh()
 
-    if self.checkLogin():
-      return True
+    if not self.__checkLogin():
+      logging.info("Failed to login with wrong username or password suspected") 
+      return False
 
-    return False
+    return True
+  
+class Robot:
+  def __init__(self, driver: 'WebDriver'):
+    self.driver = driver
+    return
 
-  def updateHosts(self):
+  def __navigateAndWaitFor(self, url: str, locator: tuple[str, str]):
+    self.driver.get(url)
+    try: 
+      WebDriverWait(self.driver, 30).until(EC.presence_of_element_located(locator))
+    except TimeoutException:
+      logging.error(f"Timeout for waiting element '{locator[1]}', page may not load properly")
+      return False
+    
+    logging.info(f"Page '{url}' loaded successfully")
+    return True
 
-    self._navigateAndWaitFor(HOST_URL, (By.XPATH, '/html/body/div[1]/div[1]/div[2]/div/div[1]/div[1]/div[2]/div/div/div[2]/div[1]/table/tbody/tr[1]/td[1]'))
+  def renewHosts(self):
+
+    if not self.__navigateAndWaitFor(
+      HOST_URL,
+      (By.XPATH, '/html/body/div[1]/div[1]/div[2]/div/div[1]/div[1]/div[2]/div/div/div[2]/div[1]/table/tbody/tr[1]/td[1]')
+    ): return False
 
     hosts = Host.fromWebElement(
-      self.browser.find_elements(By.XPATH, r'//*[@id="host-panel"]/table/tbody/tr')
+      self.driver.find_elements(By.XPATH, r'//*[@id="host-panel"]/table/tbody/tr')
     )
 
     count = 0
 
     for host in hosts:
-      if self.updateHost(host.confirmButton, host.name):
-        count += 1
-      
-    self.browser.save_screenshot("results.png")
+      if not host.confirmButton:
+        logging.info(f"Host: {host.name} do not need to update")
+        continue
+    
+      host.confirmButton.click()
+      logging.info(f"Host: {host.name} has been updated.")
+      time.sleep(3)
+
+      count += 1
+
     logging.info(f"Confirmed hosts: {count}")
 
     return True
-
-  def _navigateAndWaitFor(self, url: str, locator: tuple[str, str]):
-    self.browser.get(url)
-    try: 
-      WebDriverWait(self.browser, 30).until(EC.presence_of_element_located(locator))
-    except TimeoutException:
-      logging.error(f"Timeout for waiting element '{locator[1]}', page may not load properly\nScreenshot: {self.browser.get_screenshot_as_base64()}")
-      return
-    logging.info(f"Page '{url}' loaded successfully")
-
-    self.browser.save_screenshot("NEW2.png")
-
-    # print("I wanna close")
-    # time.sleep(1000)
-
-  def updateHost(self, hostBtn: WebElement, hostName: str) -> bool:
-    if hostBtn == None:
-      logging.info(f"Host: {hostName} do not need to update")
-      return False
-    
-    hostBtn.click()
-    logging.info(f"Host: {hostName} has been updated.")
-    time.sleep(3)
-
-    intervention = False
-    try:
-      if self.browser.find_elements(By.XPATH, "//h2[@class='big']")[0].text == "Upgrade Now":
-        intervention = True
-    except:
-      pass
-
-    if intervention:
-      raise Exception("Manual intervention required. Upgrade text detected.")
-
-    self.browser.save_screenshot(f"{hostName}_success.png")
-
-  def fetchHosts(self):
-    # Navigate to hosts list URL
-    self._navigateAndWaitFor(HOST_URL, (By.CLASS_NAME,'table-striped-row'))
-
-    host_tds = self.browser.find_elements(By.XPATH, "//td[@data-title=\"Host\"]")
-    if len(host_tds) == 0:
-      raise Exception("No hosts or host table rows not found")
-    return host_tds
-
-  def renew(self):
-    if not self.login():
-      logging.info("Failed to login, script terminated.")
-      return
-    
-    logging.info("Login successfuly")
-    self.updateHosts()
-    self.browser.quit()
 
 def main():
   parser = ArgumentParser()
@@ -273,10 +278,9 @@ def main():
 
   def _fetchEnvOrRaise(env: str) -> str:
     val = os.environ.get(env)
-    if val != None:
-      return val
+    if val != None: return val
     parser.error(f"Environment variable {env} not found, exiting")
-    
+
   if args.environment_variable:
     username = _fetchEnvOrRaise("username")
     password = _fetchEnvOrRaise("password")
@@ -299,9 +303,41 @@ def main():
     with open(args.token_path, "r") as f:
       token = json.load(f)
 
-  robot = Robot(username, password, token, args.headless)
+  # Create and initialize the web driver 
+  options = webdriver.ChromeOptions()
+  options.page_load_strategy = 'eager'
 
-  return robot.renew()
+  # Added for Raspbian Buster 4.0+ versions. Check https://www.raspberrypi.org/forums/viewtopic.php?t=258019 for reference.
+  # options.add_argument("disable-features=VizDisplayCompositor")
+  options.add_argument(f"user-agent={USER_AGENT}")
+  options.add_argument("--no-sandbox") # need when run in docker
+  options.add_argument("--disable-dev-shm-usage")
+  options.add_argument("--disable-gpu")  # If hardware acceleration is causing issues
+
+  if args.headless:
+    options.add_argument("--headless")  # If running in a headless environment
+  
+  if 'https_proxy' in os.environ:
+    options.add_argument(f"proxy-server={os.environ['https_proxy']}")
+
+  browser = webdriver.Chrome(options=options, service=ChromeService(log_output="chromedriver.log"))
+  browser.set_page_load_timeout(90) # Extended timeout for Raspberry Pi.
+  browser.set_window_size(1280, 800)
+
+  browser.delete_all_cookies()
+
+  authApi = LoginHandler(browser)
+  if not authApi.loginWithPassword(username, password, token):
+    logging.error("Failed to log-in, script will ne here")
+    return 1
+
+  logging.info("Successfully logged into no-ip dashboard")
+
+  refreshAPI = Robot(browser)
+  if not refreshAPI.renewHosts():
+    logging.error("There is an error occur while renewing the hosts")
+
+  return 0
 
 if __name__ == "__main__": 
   sys.exit(main())
