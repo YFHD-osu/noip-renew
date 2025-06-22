@@ -58,8 +58,6 @@ class Host:
 
       if button and button[0].text == "Confirm":
         return button[0]
-        
-      logging.info(f"No host 'confirm' button found")
       
       return None
     
