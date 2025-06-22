@@ -82,7 +82,7 @@ class Robot:
     self.password = password
 
     options = webdriver.ChromeOptions()
-    options.page_load_strategy = 'eager'
+    # options.page_load_strategy = 'eager'
 
     #added for Raspbian Buster 4.0+ versions. Check https://www.raspberrypi.org/forums/viewtopic.php?t=258019 for reference.
     # options.add_argument("disable-features=VizDisplayCompositor")
@@ -133,7 +133,7 @@ class Robot:
     return None
   
   def _waitWhileLoadComplete(self) -> None:
-    WebDriverWait(self.browser, 10).until(
+    WebDriverWait(self.browser, 20).until(
       lambda d: d.execute_script("return document.readyState") == "complete"
     )
   
@@ -146,7 +146,7 @@ class Robot:
     ele_usr.send_keys(self.username)
     ele_pwd.send_keys(self.password)
 
-    self.browser.find_element(By.ID, "clogs-captcha-button").click()
+    self.browser.execute_script('document.getElementById("clogs").submit();')
     logging.info("Username and password entered and login button clicked")
 
     self._waitWhileLoadComplete()
@@ -170,10 +170,10 @@ class Robot:
 
     logging.info(f"Current login URL = {self.browser.current_url}")
 
-    loginBtn = WebDriverWait(self.browser, 20).until(
+    loginButton = WebDriverWait(self.browser, 20).until(
       EC.element_to_be_clickable((By.NAME, "submit")))
 
-    self.browser.execute_script("arguments[0].click();", loginBtn)
+    self.browser.execute_script("arguments[0].click();", loginButton)
   
     # while True:
     #   attempts += 1
@@ -328,7 +328,7 @@ def main():
     with open(args.token_path, "r") as f:
       token = json.load(f)
 
-  robot = Robot(username, password, token, args.headless)
+  robot = Robot(username, password, token, False)
   return robot.renew()
 
 if __name__ == "__main__": 
