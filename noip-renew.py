@@ -124,6 +124,8 @@ class Robot:
       logging.info(f"Attempting to get verification code from Gmail API ({maxTries})")
       code = service.fetchCode(vaild_time)
 
+      time.sleep(5)
+
       if code: return code
       maxTries -= 1
 
@@ -268,8 +270,6 @@ class Robot:
     self.login()
     self.updateHosts()
     self.browser.quit()
-
-
 
 def main():
   parser = ArgumentParser()
