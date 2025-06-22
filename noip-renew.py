@@ -110,7 +110,7 @@ class Robot:
   
   def fetchCode(self, maxTries: int):
     # Past 10 minutes email is acceptable
-    vaild_time = datetime.now() - timedelta(minutes=60)
+    vaild_time = datetime.now() - timedelta(minutes=10)
 
     service = Services(self.token)
     
