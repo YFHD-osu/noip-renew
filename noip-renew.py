@@ -328,7 +328,7 @@ def main():
     with open(args.token_path, "r") as f:
       token = json.load(f)
 
-  robot = Robot(username, password, token, False)
+  robot = Robot(username, password, token, args.headless)
   return robot.renew()
 
 if __name__ == "__main__": 
