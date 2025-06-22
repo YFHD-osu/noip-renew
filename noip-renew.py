@@ -76,7 +76,7 @@ class Host:
     ]
 
 class Robot:
-  def __init__(self, username: str, password: str, token: str, headless: bool):
+  def __init__(self, username: str, password: str, token: dict, headless: bool):
     self.token = token
     self.username = username
     self.password = password
@@ -106,12 +106,9 @@ class Robot:
     self.browser.delete_all_cookies()
 
   def checkLogin(self):
-    try:
-      WebDriverWait(self.browser, 30).until(EC.presence_of_element_located((By.ID, "main-menu-toggle")))
-    except:
-      return False
-
-    return True
+    element = self.browser.find_elements(By.ID, "main-menu-toggle")
+    
+    return len(element) != 0
   
   def fetchCode(self, maxTries: int):
     # Past 10 minutes email is acceptable
@@ -135,28 +132,32 @@ class Robot:
     logging.warning(f"Failed to get verification code (timeout)")
     return None
   
+  def _waitWhileLoadComplete(self) -> None:
+    WebDriverWait(self.browser, 10).until(
+      lambda d: d.execute_script("return document.readyState") == "complete"
+    )
+  
   def login(self):
     logging.info(f"Navigating to {LOGIN_URL}")
     self.browser.get(LOGIN_URL)
     
-    logging.info("Sending username and password to the entry")
     ele_usr = self.browser.find_element(By.NAME ,"username")
     ele_pwd = self.browser.find_element(By.NAME, "password")
     ele_usr.send_keys(self.username)
     ele_pwd.send_keys(self.password)
 
-    logging.info("Login button clicked")
     self.browser.find_element(By.ID, "clogs-captcha-button").click()
+    logging.info("Username and password entered and login button clicked")
 
-    # if LOGIN_URL in self.browser.current_url:
-    #   logging.debug("Login failed with wrong username or password")
-    #   raise Exception("Login failed with wrong username or password")
-    
+    self._waitWhileLoadComplete()
+
     if self.checkLogin():
+      logging.info("Login successfuly")
       return
-
-    WebDriverWait(self.browser, 20).until(
-      EC.element_to_be_clickable((By.ID, "ManualSubmitMfa")))
+    
+    if not self.browser.find_elements(By.ID, "ManualSubmitMfa"):
+      logging.info("Login failed, wrong username or password suspected")
+      return 
     
     logging.info("2FA challenge entered, fetching the 2FA code...")
     code = self.fetchCode(maxTries=30)

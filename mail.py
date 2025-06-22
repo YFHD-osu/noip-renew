@@ -99,7 +99,7 @@ def main():
   args = parser.parse_args()
 
   if sys.gettrace() is not None:
-    logging.info("Debug environment detected. Using credentials.json as path")
+    logging.info("Debug environment detected. Using credentials.json as path.")
     args.credential = "credentials.json"
 
   with open(args.credential, "r") as file:
