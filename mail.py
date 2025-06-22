@@ -48,14 +48,16 @@ class Services:
       
       snippet = message.get("snippet", "")
 
+      print(snippet)
+
       # Skip mail if snippet field not found
       if not snippet: continue 
 
       # Skip mail if it doesn't match No-IP verification mail pattern
-      if not re.match(r"No-IP Verification Code: \d{6}", snippet): continue
+      if not re.match(r"No-IP Verification Code For account security purposes, please enter the following verification on our website: \d{6}", snippet): continue
 
       # Move used verification mail to trash 
-      self.service.users().messages().delete(userId='me', id=msgId).execute()
+      self.service.users().messages().trash(userId='me', id=msgId).execute()
       
       return re.findall(r"\d{6}", snippet)[0] # Return matched code
 
