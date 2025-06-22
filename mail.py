@@ -48,8 +48,6 @@ class Services:
       
       snippet = message.get("snippet", "")
 
-      print(snippet)
-
       # Skip mail if snippet field not found
       if not snippet: continue 
 

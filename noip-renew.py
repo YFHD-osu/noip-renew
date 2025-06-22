@@ -159,40 +159,13 @@ class Robot:
     logging.info("2FA challenge entered, fetching the 2FA code...")
     code = self.fetchCode(maxTries=30)
 
-    logging.info(f"Successfully got the verification code !")
     input2fa = self.browser.find_element(By.ID, "otp-input").find_elements(By.TAG_NAME, "input")
     
     for index, element in enumerate(input2fa):
       element.send_keys(str(code)[index])
-
-    logging.info(f"Current login URL = {self.browser.current_url}")
-
-    loginButton = WebDriverWait(self.browser, 20).until(
-      EC.element_to_be_clickable((By.NAME, "submit")))
-
-    self.browser.execute_script("arguments[0].click();", loginButton)
-  
-    # while True:
-    #   attempts += 1
-    #   if attempts > 30:
-    #     logging.warning(f"Failed to get verification code (timeout)")
-    #     return None
-      
-    #   logging.info(f"Attempting to get verification code from Gmail API ({attempts})")
-    #   code = service.fetchCode(vaild_time)
-
-    #   if code: break # Exit check loop if code is vaild
-    #   time.sleep(5) # Prevent too many requests 
-      
-      # # Click "resend email" button if it's enabled
-      # resendBtn = self.browser.find_element(By.ID, "resend")
-      # if (resendBtn.is_enabled()) : resendBtn.click()
-
-      
-
-      # loginBtn.click()
     
-    logging.debug(f"Current wait URL = {self.browser.current_url}")
+    logging.info(f"Successfully got and entered the verification code !")
+    
     self.browser.refresh() # Refresh page to make sure page be redirect
     try: # Wait for dashboard to load
       logging.debug(f"Current wait URL = {self.browser.current_url}")
@@ -292,7 +265,7 @@ def main():
   if sys.gettrace() is not None:
     logging.info("Debug environment detected. Using environment variable to execute the script.")
     args.verbose = True
-    args.headless = True
+    args.headless = False
     args.environment_variable = True
   
   username: str
