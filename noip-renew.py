@@ -329,6 +329,8 @@ def main():
 
   robot = Robot(username, password, token, args.headless)
 
+  robot.fetchCode(30)
+  return
   return robot.renew()
 
 if __name__ == "__main__": 

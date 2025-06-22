@@ -29,30 +29,35 @@ class Services:
     return
 
   def fetchCode(self, after: datetime) -> int:
-    messages_resource: Resource = self.service.users().messages()
+    results = self.service \
+      .users() \
+      .messages() \
+      .list(userId='me', q=f'after:{int(after.timestamp())}') \
+      .execute()
+    
+    messages = results.get('messages', [])
 
-    vaild_messages = messages_resource.list(
-      userId="me",
-      labelIds=["CATEGORY_UPDATES"],
-      q=f"after:{int(after.timestamp())}"
-    ).execute()
+    logging.info(f"Filtered {len(messages)} emails that income after {after}")
 
-    logging.info(f"Filtering {vaild_messages.get('resultSizeEstimate', 0)} possible email...")
-
-    for msgId in map(lambda x: x["id"], vaild_messages.get("messages", [])):
-      msg = vaild_messages.get(userId="me", id=msgId).execute()
-      subject = list(filter(lambda e: e["name"] == "Subject", msg["payload"]["headers"]))
-
-      # Skip mail if subject field not found
-      if not len(subject): continue 
+    for msgId in map(lambda x: x["id"], messages):
+      message = self.service \
+        .users() \
+        .messages() \
+        .get(userId='me', id=msgId, format='full') \
+        .execute()
       
+      snippet = message.get("snippet", "")
+
+      # Skip mail if snippet field not found
+      if not snippet: continue 
+
       # Skip mail if it doesn't match No-IP verification mail pattern
-      if not re.match(r"No-IP Verification Code: \d{6}", subject[0]["value"]): continue
+      if not re.match(r"No-IP Verification Code: \d{6}", snippet): continue
 
       # Move used verification mail to trash 
-      vaild_messages.trash(userId="me", id=msgId).execute()
+      self.service.users().messages().delete(userId='me', id=msgId).execute()
       
-      return re.findall(r"\d{6}", subject[0]["value"])[0] # Return matched code
+      return re.findall(r"\d{6}", snippet)[0] # Return matched code
 
   @staticmethod
   def authoirzeFlow(credential: dict) -> dict:
