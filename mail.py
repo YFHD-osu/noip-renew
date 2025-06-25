@@ -17,14 +17,14 @@ def main():
 
   parser = ArgumentParser()
 
-  parser.add_argument("-cred", "--credential", help="Gmail API credential json path")
+  parser.add_argument("credential_path", help="Gmail API credential json path")
   args = parser.parse_args()
 
   if sys.gettrace() is not None:
     logging.info("Debug environment detected. Using credentials.json as path.")
-    args.credential = "credentials.json"
+    args.credential_path = "credentials.json"
 
-  with open(args.credential, "r") as file:
+  with open(args.credential_path, "r") as file:
     cred = json.load(file)
 
   flow = InstalledAppFlow.from_client_config(cred, SCOPES)
@@ -38,8 +38,6 @@ def main():
   logging.info("Your token has been written into current folder.")
 
   return 0
-
-  
 
 if __name__ == "__main__": 
   sys.exit(main())

@@ -54,7 +54,7 @@ class MailClawer:
     self.service = build("gmail", "v1", credentials=self.creds)
     return
 
-  def fetchCode(self, after: datetime) -> int:
+  def fetch_code(self, after: datetime) -> int:
     results = self.service \
       .users() \
       .messages() \
@@ -92,19 +92,19 @@ class Host:
     self.confirmButton = confirmButton
 
   @staticmethod
-  def fromTrWebElement(tr: 'WebElement') -> 'Host':
+  def from_tr(tr: 'WebElement') -> 'Host':
 
-    def _fetchName(e: 'WebElement') -> str:
+    def __fetch_name(e: 'WebElement') -> str:
       return e \
         .find_element(By.XPATH, r".//a[@class='link-info cursor-pointer notranslate']") \
         .text
     
-    def _fetchExpDays(e: 'WebElement') -> int:
+    def __fetch_exp_days(e: 'WebElement') -> int:
       matches = e.find_elements(By.XPATH, ".//a[@class='no-link-style']")
       if not matches: return 0
       return int(re.search(r"\d+", matches[0].text).group())
     
-    def _fetchButton(e: 'WebElement'):
+    def __fetch_button(e: 'WebElement'):
       button = e.find_elements(By.XPATH, f'.//td[6]/button[1]')
 
       if button and button[0].text == "Confirm":
@@ -113,15 +113,15 @@ class Host:
       return None
     
     return Host(
-      name = _fetchName(tr),
-      expDays = _fetchExpDays(tr),
-      confirmButton= _fetchButton(tr)
+      name = __fetch_name(tr),
+      expDays = __fetch_exp_days(tr),
+      confirmButton= __fetch_button(tr)
     )
   
   @staticmethod
-  def fromWebElement(tr: 'list[WebElement]') -> list['Host']:
+  def from_tr_list(tr: 'list[WebElement]') -> list['Host']:
     return [
-      Host.fromTrWebElement(e) for e in tr
+      Host.from_tr(e) for e in tr
     ]
 
 class LoginHandler:
@@ -130,15 +130,15 @@ class LoginHandler:
     self.max2FAAttempts = max2FAAttempts
     return
   
-  def __waitWhileLoadComplete(self) -> None:
+  def __await_load(self) -> None:
     WebDriverWait(self.driver, 20).until(
       lambda d: d.execute_script("return document.readyState") == "complete"
     )
 
-  def __checkLogin(self):
+  def __check_login(self):
     return len(self.driver.find_elements(By.ID, "main-menu-toggle")) != 0
   
-  def __solve2FA(self, token: dict):
+  def __solve_2FA(self, token: dict):
     logging.info("2FA challenge entered, fetching the 2FA code...")
 
     # Past 10 minutes email is acceptable
@@ -156,7 +156,7 @@ class LoginHandler:
 
     while (attempt < self.max2FAAttempts):
       logging.info(f"Attempting to get verification code from Gmail API ({attempt})")
-      code = service.fetchCode(vaild_time)
+      code = service.fetch_code(vaild_time)
 
       if code: break
 
@@ -178,7 +178,7 @@ class LoginHandler:
 
     return True
 
-  def loginWithPassword(self, username: str, password: str, token: dict):
+  def login_with_password(self, username: str, password: str, token: dict):
     logging.info(f"Navigating to {LOGIN_URL}")
     self.driver.get(LOGIN_URL)
     
@@ -188,17 +188,17 @@ class LoginHandler:
     self.driver.execute_script(f'document.getElementById("clogs").submit();')
     logging.info("Username and password entered and login button clicked")
 
-    self.__waitWhileLoadComplete()
+    self.__await_load()
 
     # If login not success after submitting the username and password, check if email 2FA is required
-    if self.driver.find_elements(By.ID, "ManualSubmitMfa") and not self.__solve2FA(token):
+    if self.driver.find_elements(By.ID, "ManualSubmitMfa") and not self.__solve_2FA(token):
       logging.error("Failed to pass through the 2FA challenge")
       return False
 
     # Refresh page to make sure page be redirect
     self.driver.refresh()
 
-    if not self.__checkLogin():
+    if not self.__check_login():
       logging.info("Failed to login with wrong username or password suspected") 
       return False
 
@@ -209,7 +209,7 @@ class Robot:
     self.driver = driver
     return
 
-  def __navigateAndWaitFor(self, url: str, locator: tuple[str, str]):
+  def __await_navigate(self, url: str, locator: tuple[str, str]):
     self.driver.get(url)
     try: 
       WebDriverWait(self.driver, 30).until(EC.presence_of_element_located(locator))
@@ -220,14 +220,14 @@ class Robot:
     logging.info(f"Page '{url}' loaded successfully")
     return True
 
-  def renewHosts(self):
+  def renew_hosts(self):
 
-    if not self.__navigateAndWaitFor(
+    if not self.__await_navigate(
       HOST_URL,
       (By.XPATH, '/html/body/div[1]/div[1]/div[2]/div/div[1]/div[1]/div[2]/div/div/div[2]/div[1]/table/tbody/tr[1]/td[1]')
     ): return False
 
-    hosts = Host.fromWebElement(
+    hosts = Host.from_tr_list(
       self.driver.find_elements(By.XPATH, r'//*[@id="host-panel"]/table/tbody/tr')
     )
 
@@ -251,10 +251,7 @@ class Robot:
 def main():
   parser = ArgumentParser()
 
-  parser.add_argument("-u", "--username", help="Your No-IP login account username")
-  parser.add_argument("-p", "--password", help="Your No-IP login account password")
-  parser.add_argument("-t", "--token-path", help="Path to your Gmail API token json file", default="token.json")
-  parser.add_argument("-e", "--environment-variable", help="If this flag be added, username; password; token arguments will not required", action='store_true')
+  parser.add_argument("-p", "--https_proxy", help="Set http proxy for selenium")
   parser.add_argument("-v", "--verbose", help="Increase output verbosity", action="store_true")
   parser.add_argument("-hl", "--headless", help="Hide browser window", action="store_true")
 
@@ -270,38 +267,17 @@ def main():
     logging.info("Debug environment detected. Using environment variable to execute the script.")
     args.verbose = True
     args.headless = False
-    args.environment_variable = True
-  
-  username: str
-  password: str
-  token: dict
 
   def _fetchEnvOrRaise(env: str) -> str:
     val = os.environ.get(env)
     if val != None: return val
     parser.error(f"Environment variable {env} not found, exiting")
 
-  if args.environment_variable:
-    username = _fetchEnvOrRaise("username")
-    password = _fetchEnvOrRaise("password")
-    token = json.loads( _fetchEnvOrRaise("token") )
-    while isinstance(token, str):
-      token = json.loads( token )
-
-  else:
-    if not args.username:
-      parser.error("Please provide username with -u")
-
-    if not args.password:
-      parser.error("Please provide password with -p")
-
-    if not args.token_path:
-      parser.error("Please provide token path with -t")
-    
-    username = args.username
-    password = args.password
-    with open(args.token_path, "r") as f:
-      token = json.load(f)
+  username: str  = _fetchEnvOrRaise("username")
+  password: str  = _fetchEnvOrRaise("password")
+  token:    dict = json.loads( _fetchEnvOrRaise("token") )
+  while isinstance(token, str):
+    token = json.loads( token )
 
   # Create and initialize the web driver 
   options = webdriver.ChromeOptions()
@@ -317,7 +293,7 @@ def main():
   if args.headless:
     options.add_argument("--headless")  # If running in a headless environment
   
-  if 'https_proxy' in os.environ:
+  if args.https_proxy:
     options.add_argument(f"proxy-server={os.environ['https_proxy']}")
 
   browser = webdriver.Chrome(options=options, service=ChromeService(log_output="chromedriver.log"))
@@ -327,16 +303,17 @@ def main():
   browser.delete_all_cookies()
 
   authApi = LoginHandler(browser)
-  if not authApi.loginWithPassword(username, password, token):
+  if not authApi.login_with_password(username, password, token):
     logging.error("Failed to log-in, script will ne here")
     return 1
 
   logging.info("Successfully logged into no-ip dashboard")
 
   refreshAPI = Robot(browser)
-  if not refreshAPI.renewHosts():
+  if not refreshAPI.renew_hosts():
     logging.error("There is an error occur while renewing the hosts")
 
+  logging.info("Script executed successfully")
   return 0
 
 if __name__ == "__main__": 
