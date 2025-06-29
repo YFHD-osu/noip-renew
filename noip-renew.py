@@ -196,7 +196,7 @@ class LoginHandler:
       return False
 
     # Refresh page to make sure page be redirect
-    self.driver.refresh()
+    self.driver.get(HOST_URL)
 
     if not self.__check_login():
       logging.info("Failed to login with wrong username or password suspected") 
