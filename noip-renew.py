@@ -136,7 +136,7 @@ class LoginHandler:
     )
 
   def __check_login(self):
-    return len(self.driver.find_elements(By.ID, "main-menu-toggle")) != 0
+    return len(self.driver.find_elements(By.ID, "user-email-container")) != 0
   
   def __solve_2FA(self, token: dict):
     logging.info("2FA challenge entered, fetching the 2FA code...")
@@ -251,9 +251,9 @@ class Robot:
 def main():
   parser = ArgumentParser()
 
-  parser.add_argument("-p", "--https_proxy", help="Set http proxy for selenium")
-  parser.add_argument("-v", "--verbose", help="Increase output verbosity", action="store_true")
-  parser.add_argument("-hl", "--headless", help="Hide browser window", action="store_true")
+  parser.add_argument("-p",  "--https_proxy", help="Set http proxy for selenium")
+  parser.add_argument("-v",  "--verbose",     help="Increase output verbosity", action="store_true")
+  parser.add_argument("-hl", "--headless",    help="Hide browser window",       action="store_true")
 
   args = parser.parse_args()
 
@@ -281,7 +281,7 @@ def main():
 
   # Create and initialize the web driver 
   options = webdriver.ChromeOptions()
-  options.page_load_strategy = 'eager'
+  # options.page_load_strategy = 'eager'
 
   # Added for Raspbian Buster 4.0+ versions. Check https://www.raspberrypi.org/forums/viewtopic.php?t=258019 for reference.
   # options.add_argument("disable-features=VizDisplayCompositor")
